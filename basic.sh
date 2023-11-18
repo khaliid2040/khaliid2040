@@ -1,8 +1,11 @@
 #!/bin/bash
 #creating backup script
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
+YELLOW='\033[0;33m'
+echo "${YELLOW}file automatic remover"
 create_file() {
     if ! find -name "file*" -type f | grep -q .;
     then

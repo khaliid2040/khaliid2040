@@ -36,6 +36,7 @@ echo -e "${GREEN}[+]${NC}archive successuful"
 source_dir=$1
 dest_dir=$2
 echo -e "${GREEN}[+]${NC} backing up from $source_dir to $dest_dir"
+sleep 1
 if [ -f $source_dir ] && [ -d $dest_dir ] #|| [ -d $source_dir ] && [ -f $dest_dir ]
 then
     echo -e "${GREEN}[+]${NC}backuping up"

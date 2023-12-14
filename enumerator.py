@@ -2,7 +2,7 @@
 import argparse
 import platform
 import psutil
-import time
+import time 
 import subprocess
 import re
 import netifaces
@@ -10,10 +10,10 @@ import sys
 from colorama import Fore,Style
 import socket
 import os
+from datetime import datetime, timedelta
 #in this code you may see escape character \n i used it in place of instead of using print repeatly in order to improve the code
 #first it must be verifyed if the envirnment the script running on is linux specifically redhat and debian based distro if you are 
 #want to use for software management
-
 def general_verification():
     if platform.system()=="Linux":
         print(f'{Fore.GREEN} all good to go{Style.RESET_ALL}')
@@ -32,6 +32,39 @@ def general_verification():
             check_dependency()
         except KeyboardInterrupt:
             print(f'{Fore.RED} interrupted exiting...{Style.RESET_ALL}')
+def get_network_interfaces(interface):
+    addresses = netifaces.ifaddresses(interface)
+
+    if netifaces.AF_INET in addresses:
+        ipv4_addresses = addresses[netifaces.AF_INET]
+        for address in ipv4_addresses:
+            print("Interface:", interface)
+            print("  - IPv4 Address:", address['addr'])
+            print("  - Broadcast Address:", address.get('broadcast'))
+
+    if netifaces.AF_INET6 in addresses:
+        ipv6_addresses = addresses[netifaces.AF_INET6]
+        for address in ipv6_addresses:
+            #print("Interface:", interface)
+            print("  - IPv6 Address:", address['addr'])
+
+    mtu = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
+    if mtu:
+        mtu_value = mtu[0].get('mtu')
+        if mtu_value is not None:
+            print("Interface:", interface)
+            print("  - MTU:", mtu_value)
+
+    vendor = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
+    if vendor:
+        vendor_name = vendor[0].get('vendor')
+        if vendor_name is not None:
+            print("Interface:", interface)
+            print("  - Vendor:", vendor_name)
+    else:
+        mac_address = vendor[0].get('addr')
+        print("Interface:", interface)
+        print("  - MAC Address:", mac_address)
 #when reading memory psutils prints the size by bytes and there is no way to make it readable so the function 
 # below doing the job by converting the size in from bytes to more human readable size
 def format_size(size):
@@ -77,6 +110,11 @@ def system(process,user):
                 pass
         
     time.sleep(2)
+    boot_time = psutil.boot_time()
+    current_time = datetime.now().timestamp()
+    uptime = current_time - boot_time
+    uptime_readable = str(timedelta(seconds=uptime))
+    print(f"System uptime: {Fore.GREEN} {uptime_readable} {Style.RESET_ALL}")
     if args.process==None:
         pass
     else:
@@ -110,18 +148,14 @@ def network(interface):
     interfaces= netifaces.interfaces()
     if interface in interfaces:
         try:
-            addresses=netifaces.ifaddresses(interface).get(netifaces.AF_INET)
-            for address in addresses:
-                print(f"ip address: {address['addr']}")
-                print(f"netmask: {address['netmask']}")
-                if "broadcast" in address:
-                    print(f"broadcast address:{address['broadcast']}")
-                elif "peer" in address:
-                    print(f"peer connection: {address['peer']}")
-        except TypeError:
-            print(f'{Fore.RED} error: may be interface link is down {Style.RESET_ALL}')
-    else:
-        print(f'{Fore.RED}ivalid interface{Style.RESET_ALL}')
+            get_network_interfaces(interface)
+        except ValueError:
+            print(f'{Fore.RED}invalid interface,{Style.RESET_ALL}')
+    elif interface is not interfaces:
+        print(f'{Fore.RED}invalid interface,{Style.RESET_ALL} listing other interfaces')
+        interfaces= netifaces.interfaces()
+        for interface in interfaces:
+            get_network_interfaces(interface)
     print(Fore.YELLOW + 'dumping routing table...' + Style.RESET_ALL)
     subprocess.run(['ip','route','show'])
     print(Fore.YELLOW + 'dumping arp table...' + Style.RESET_ALL)
@@ -175,7 +209,7 @@ subperser_system=subperser.add_parser("system",help="system reporting")
 subperser_system.add_argument("-p","--process",help="monitoring per process",type=int)
 subperser_system.add_argument("-u","--user",help="output only specific user",type=str)
 subperser_network=subperser.add_parser("network",help="network reporting")
-subperser_network.add_argument('-i','--interface',help="choose interface",required=True)
+subperser_network.add_argument('-i','--interface',help="choose interface")
 #any neccessary arguments
 subperser_software=subperser.add_parser("software",help="software reporting")
 subperser_software.add_argument('-s','--search',help='search installed packages',type=str)

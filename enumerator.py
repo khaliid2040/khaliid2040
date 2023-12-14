@@ -13,12 +13,25 @@ import os
 #in this code you may see escape character \n i used it in place of instead of using print repeatly in order to improve the code
 #first it must be verifyed if the envirnment the script running on is linux specifically redhat and debian based distro if you are 
 #want to use for software management
-def target_os_verification():
+
+def general_verification():
     if platform.system()=="Linux":
         print(f'{Fore.GREEN} all good to go{Style.RESET_ALL}')
     else:
         print(f'{Fore.RED} Error: target is {platform.system()} is not supported {Style.RESET_ALL}')
         sys.exit(2)
+    def check_dependency():
+        try:
+            print(f'{Fore.MAGENTA} checking dependencies{Style.RESET_ALL}')
+            print(f'{Fore.YELLOW}NOTE: this checking may not be useful in some cases if so you have to manually install them')
+            requirement_file=open('requirements.txt','r')
+            content=requirement_file.read().splitlines()
+            print(content)
+            for module in content:
+                subprocess.run(['pip','install',module])
+            check_dependency()
+        except KeyboardInterrupt:
+            print(f'{Fore.RED} interrupted exiting...{Style.RESET_ALL}')
 #when reading memory psutils prints the size by bytes and there is no way to make it readable so the function 
 # below doing the job by converting the size in from bytes to more human readable size
 def format_size(size):
@@ -38,7 +51,7 @@ def user_checking():
         sys.exit(2)
     
 #the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
-def system(process,user,current_user):
+def system(process,user):
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
     print(f"current kernel running version:{Fore.GREEN} {platform.release()} {Style.RESET_ALL}")
     print(f"current cpu architecture:{Fore.GREEN}{platform.machine()} {Style.RESET_ALL}")
@@ -68,11 +81,14 @@ def system(process,user,current_user):
         pass
     else:
         print("enumerating process resources...")
-        process_psutils=psutil.Process(process)
-        cpu_percent= psutil.cpu_percent()
-        cpu_time= psutil.cpu_times()
-        print(f"cpu percent of process{Fore.GREEN} {Fore.GREEN} {process_psutils}: {cpu_percent} {Style.RESET_ALL}")
-        print(f"cpu time: {cpu_time}")
+        try:
+            process_psutils=psutil.Process(process)
+            cpu_percent= psutil.cpu_percent()
+            cpu_time= psutil.cpu_times()
+            print(f"cpu percent of process{Fore.GREEN} {Fore.GREEN} {process_psutils}: {cpu_percent} {Style.RESET_ALL}")
+            print(f"cpu time: {cpu_time}")
+        except psutil.NoSuchProcess:
+            print(f"{Fore.RED} process id {process} not found {Style.RESET_ALL}")
     print(Fore.YELLOW + "enumerating memory utilization..." + Style.RESET_ALL)
     total_memory= psutil.virtual_memory().total
     readable_total=format_size(total_memory)
@@ -127,6 +143,7 @@ def network(interface):
     for port in common_tcp_ports:
         check_port(host,port)
 def software(search_packages):
+    print(f'{Fore.MAGENTA} performing software enumeration{Style.RESET_ALL}')
     command = ['which', 'rpm', 'dpkg']
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     package_manager=result.stdout.strip()
@@ -146,7 +163,11 @@ def software(search_packages):
             print(f'{Fore.GREEN}{search_packages} package present {Style.RESET_ALL}')
         else:
             print(f'{Fore.GREEN}{search_packages} package is not present {Style.RESET_ALL}')
-            
+    try:
+        print(f'{Fore.MAGENTA} cleaning up leftovers{Style.RESET_ALL}')
+        subprocess.run(['sudo','dnf','autoremove'])
+    except KeyboardInterrupt:
+        print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')        
 #Section 2 command argument section
 parser= argparse.ArgumentParser(description="basic resource monitor and enumerator")
 subperser= parser.add_subparsers(dest="operation",required=True)
@@ -160,7 +181,7 @@ subperser_software=subperser.add_parser("software",help="software reporting")
 subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
 args=parser.parse_args()
 #here we call the fucntion specified above in order to check target os
-target_os_verification()
+general_verification()
 user_checking
 if args.operation=="system":
     Pprocess=args.process

@@ -34,13 +34,15 @@ def general_verification():
             print(f'{Fore.RED} interrupted exiting...{Style.RESET_ALL}')
 def get_network_interfaces(interface):
     addresses = netifaces.ifaddresses(interface)
-
+    gateways= netifaces.gateways()
     if netifaces.AF_INET in addresses:
         ipv4_addresses = addresses[netifaces.AF_INET]
         for address in ipv4_addresses:
             print("Interface:", interface)
             print("  - IPv4 Address:", address['addr'])
             print("  - Broadcast Address:", address.get('broadcast'))
+            print("  - Subnet Mask:", address['netmask'])
+            print("  - Gateway info:", gateways[2][0])
 
     if netifaces.AF_INET6 in addresses:
         ipv6_addresses = addresses[netifaces.AF_INET6]
@@ -82,7 +84,37 @@ def user_checking():
         print(f'{Fore.RED} it is not recommended to run the script with root unless we explicitly ask you to do{Style.RESET_ALL}')
         print('exiting...')
         sys.exit(2)
-    
+def network_services_checking():
+    # List of network services to filter
+    network_services = [
+    "sshd", "httpd","nginx", 
+    "mysqld", "named", "dhcpd", "vsftpd", "smbd", 
+    "postfix", "dovecot",   "telnet", "nfs",
+    "snmpd","cups","squid",
+    "ircd","openvpn", "pptpd",
+    "nfs-kernel-server",
+    "samba",
+]
+
+    # Run the systemctl command to list specific active network services
+    command = ['systemctl', 'list-units', '--type=service', '--no-pager', '--no-legend']
+    output = subprocess.check_output(command, universal_newlines=True)
+
+# Process the output and extract service and status
+    lines = output.strip().split('\n')
+    for line in lines:
+        parts = line.split()
+        if parts and len(parts) >= 3:
+            service = parts[0]
+            status = parts[2]
+        # Remove the ".service" extension from the service name
+            service_name = service.split('.', 1)[0]
+        # Check if the service is in the network services list
+            if service_name in network_services:
+                print(f'{service_name} is {status}')
+        
+        
+            
 #the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
 def system(process,user):
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
@@ -114,7 +146,9 @@ def system(process,user):
     current_time = datetime.now().timestamp()
     uptime = current_time - boot_time
     uptime_readable = str(timedelta(seconds=uptime))
-    print(f"System uptime: {Fore.GREEN} {uptime_readable} {Style.RESET_ALL}")
+    uptime_readable_hours= uptime_readable[0]
+    uptime_readable_minutes= uptime_readable[2:4]
+    print(f'uptime: {Fore.GREEN}{uptime_readable_hours} hours and {uptime_readable_minutes} minutes{Style.RESET_ALL}')
     if args.process==None:
         pass
     else:
@@ -142,7 +176,7 @@ def system(process,user):
     print(f"memory utilization percent: {psutil.virtual_memory().percent}%")
 
 def network(interface):
-    print(f"{Fore.MAGENTA} performing network enumeration{Style.RESET_ALL}")
+    print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")
     time.sleep(2)
     print(f'{Fore.YELLOW}looking for interface {interface} {Style.RESET_ALL}')
     interfaces= netifaces.interfaces()
@@ -159,8 +193,11 @@ def network(interface):
     print(Fore.YELLOW + 'dumping routing table...' + Style.RESET_ALL)
     subprocess.run(['ip','route','show'])
     print(Fore.YELLOW + 'dumping arp table...' + Style.RESET_ALL)
-    subprocess.run(['arp','-n'])
-    print(f'{Fore.MAGENTA} enumerating most common tcp ports...{Style.RESET_ALL}')
+    try:
+        subprocess.run(['arp','-n'])
+    except FileNotFoundError:
+        print(f'{Fore.RED}command not found arp {Style.RESET_ALL}')
+    print(f'{Fore.MAGENTA}enumerating most common tcp ports...{Style.RESET_ALL}')
     def check_port(host, port):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -176,8 +213,11 @@ def network(interface):
     # Checking TCP ports
     for port in common_tcp_ports:
         check_port(host,port)
+    # checking running network services the function is declared above
+    print(f'{Fore.MAGENTA}checking active network services{Style.RESET_ALL}')
+    network_services_checking()
 def software(search_packages):
-    print(f'{Fore.MAGENTA} performing software enumeration{Style.RESET_ALL}')
+    print(f'{Fore.MAGENTA}performing software enumeration{Style.RESET_ALL}')
     command = ['which', 'rpm', 'dpkg']
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     package_manager=result.stdout.strip()

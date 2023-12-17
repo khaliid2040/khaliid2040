@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import argparse
 import platform
-import psutil
+import psutil, psutil._common
 import time 
 import subprocess
 import re
@@ -67,6 +67,9 @@ def get_network_interfaces(interface):
         mac_address = vendor[0].get('addr')
         print("Interface:", interface)
         print("  - MAC Address:", mac_address)
+def mandetory_access_control_identify():
+    selinux_utilities=['semanage','sestatus']
+    apparmore_utilities=[]
 #when reading memory psutils prints the size by bytes and there is no way to make it readable so the function 
 # below doing the job by converting the size in from bytes to more human readable size
 def format_size(size):
@@ -141,7 +144,6 @@ def system(process,user):
             else:
                 pass
         
-    time.sleep(2)
     boot_time = psutil.boot_time()
     current_time = datetime.now().timestamp()
     uptime = current_time - boot_time
@@ -149,6 +151,9 @@ def system(process,user):
     uptime_readable_hours= uptime_readable[0]
     uptime_readable_minutes= uptime_readable[2:4]
     print(f'uptime: {Fore.GREEN}{uptime_readable_hours} hours and {uptime_readable_minutes} minutes{Style.RESET_ALL}')
+    print(f'{Fore.YELLOW}current cpu utilization {Style.RESET_ALL}')
+    cpu_utilization= psutil.cpu_percent(interval=7)
+    print("cpu utilization percentage: ",cpu_utilization,"%")
     if args.process==None:
         pass
     else:
@@ -163,17 +168,29 @@ def system(process,user):
             print(f"{Fore.RED} process id {process} not found {Style.RESET_ALL}")
     print(Fore.YELLOW + "enumerating memory utilization..." + Style.RESET_ALL)
     total_memory= psutil.virtual_memory().total
-    readable_total=format_size(total_memory)
+    readable_total=psutil._common.bytes2human(total_memory)
     free_memory= psutil.virtual_memory().free
-    readable_free=format_size(free_memory)
-    buffer_memory= psutil.virtual_memory().buffers
-    readable_buffer=format_size(buffer_memory)
+    readable_free=psutil._common.bytes2human(free_memory)
+    buffer_cache_memory= psutil.virtual_memory().buffers + psutil.virtual_memory().cached
+    readable_buffer=psutil._common.bytes2human(buffer_cache_memory)
     available_memory= psutil.virtual_memory().available
-    readable_available=format_size(available_memory)
+    readable_available=psutil._common.bytes2human(available_memory)
     used_memory= psutil.virtual_memory().used
-    readable_used=format_size(used_memory)
-    print(f"{Fore.GREEN}total memory: {readable_total}\n free: {readable_free}\n buffer: {readable_buffer}\n available: {readable_available}\n used memory {readable_used} {Style.RESET_ALL}")
-    print(f"memory utilization percent: {psutil.virtual_memory().percent}%")
+    readable_used=psutil._common.bytes2human(used_memory)
+    print(f"total memory: {readable_total}\nfree: {readable_free}\nbuffer: {readable_buffer}\navailable: {readable_available}\nused memory {readable_used}")
+    print(f"{Fore.GREEN}memory utilization percent: {psutil.virtual_memory().percent}% {Style.RESET_ALL}")
+    print(f'{Fore.YELLOW}disk usage per partition {Style.RESET_ALL}')
+    disk_partitions = psutil.disk_partitions()
+    # Print header
+    print("{:<15} {:<15} {:<10}".format("Device", "Mountpoint", "Size"))
+
+    for partition in disk_partitions:
+        partition_device = partition.device
+        partition_mountpoint = partition.mountpoint
+        # Get disk usage for the current partition
+        disk_usage = psutil.disk_usage(partition_mountpoint)
+        readable = psutil._common.bytes2human(disk_usage.total)
+        print("{:<15} {:<15} {:<10}".format(partition_device, partition_mountpoint, readable))
 
 def network(interface):
     print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")

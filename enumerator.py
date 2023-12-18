@@ -16,22 +16,11 @@ from datetime import datetime, timedelta
 #want to use for software management
 def general_verification():
     if platform.system()=="Linux":
-        print(f'{Fore.GREEN} all good to go{Style.RESET_ALL}')
+        print(f'{Fore.GREEN}all good to go{Style.RESET_ALL}')
     else:
-        print(f'{Fore.RED} Error: target is {platform.system()} is not supported {Style.RESET_ALL}')
+        print(f'{Fore.RED}Error: target is {platform.system()} is not supported {Style.RESET_ALL}')
         sys.exit(2)
-    def check_dependency():
-        try:
-            print(f'{Fore.MAGENTA} checking dependencies{Style.RESET_ALL}')
-            print(f'{Fore.YELLOW}NOTE: this checking may not be useful in some cases if so you have to manually install them')
-            requirement_file=open('requirements.txt','r')
-            content=requirement_file.read().splitlines()
-            print(content)
-            for module in content:
-                subprocess.run(['pip','install',module])
-            check_dependency()
-        except KeyboardInterrupt:
-            print(f'{Fore.RED} interrupted exiting...{Style.RESET_ALL}')
+# check host network interfaces
 def get_network_interfaces(interface):
     addresses = netifaces.ifaddresses(interface)
     gateways= netifaces.gateways()
@@ -68,25 +57,31 @@ def get_network_interfaces(interface):
         print("Interface:", interface)
         print("  - MAC Address:", mac_address)
 def mandetory_access_control_identify():
-    selinux_utilities=['semanage','sestatus']
-    apparmore_utilities=[]
+    try:
+        import selinux
+        selinux_status= selinux.security_getenforce()
+        if selinux_status==0:
+            print(f'{Fore.RED}selinux is disabled{Style.RESET_ALL}')
+        elif selinux_status==1:
+            print(f'{Fore.GREEN}selinux is in enforcing mode{Style.RESET_ALL}')
+        else:
+            print(f'{Fore.YELLOW}selinux is in permisive mode')
+        output = subprocess.check_output(['aa-status'])
+        lines = output.decode().split('\n')
+
+        for line in lines:
+            if 'apparmor module is loaded' in line:
+                print("AppArmor is enabled")
+                break
+            else:
+                print("AppArmor is disabled")
+    except ModuleNotFoundError:
+        pass
+    except FileNotFoundError:
+        pass
 #when reading memory psutils prints the size by bytes and there is no way to make it readable so the function 
 # below doing the job by converting the size in from bytes to more human readable size
-def format_size(size):
-    power = 2**10
-    n = 0
-    size_labels = ['B', 'KB', 'MB', 'GB', 'TB']
-    while size > power:
-        size /= power
-        n += 1
-    return f"{size:.2f} {size_labels[n]}"
-def user_checking():
-    uid=os.getuid()
-    gid=os.getgid()
-    if uid and gid == 0:
-        print(f'{Fore.RED} it is not recommended to run the script with root unless we explicitly ask you to do{Style.RESET_ALL}')
-        print('exiting...')
-        sys.exit(2)
+
 def network_services_checking():
     # List of network services to filter
     network_services = [
@@ -115,9 +110,7 @@ def network_services_checking():
         # Check if the service is in the network services list
             if service_name in network_services:
                 print(f'{service_name} is {status}')
-        
-        
-            
+
 #the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
 def system(process,user):
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
@@ -126,6 +119,7 @@ def system(process,user):
     print(f"hostname:{Fore.GREEN}{platform.node()} {Style.RESET_ALL}")
     print(f"number of processors:{Fore.GREEN} {psutil.cpu_count()} {Style.RESET_ALL}")
     print(f"number of cores: {Fore.GREEN} {psutil.cpu_count(logical=False)} {Style.RESET_ALL}")
+    mandetory_access_control_identify()
     print("enumerating users...")
     if args.user==None:
         print(f"{Fore.YELLOW}no argument:passing... defaulting to all users with login shell{Style.RESET_ALL}")
@@ -177,7 +171,7 @@ def system(process,user):
     readable_available=psutil._common.bytes2human(available_memory)
     used_memory= psutil.virtual_memory().used
     readable_used=psutil._common.bytes2human(used_memory)
-    print(f"total memory: {readable_total}\nfree: {readable_free}\nbuffer: {readable_buffer}\navailable: {readable_available}\nused memory {readable_used}")
+    print(f"total memory: {readable_total}\nfree: {readable_free}\nbuffer: {readable_buffer}\navailable: {readable_available}\nused memory: {readable_used}")
     print(f"{Fore.GREEN}memory utilization percent: {psutil.virtual_memory().percent}% {Style.RESET_ALL}")
     print(f'{Fore.YELLOW}disk usage per partition {Style.RESET_ALL}')
     disk_partitions = psutil.disk_partitions()
@@ -239,26 +233,27 @@ def software(search_packages):
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     package_manager=result.stdout.strip()
     if "rpm" in package_manager:
-        rpm=subprocess.run([package_manager,'-aq'], stdout=subprocess.PIPE)
+        rpm=subprocess.run([package_manager,'-aq'], stdout=subprocess.PIPE, text=True)
         packages=rpm.stdout
         result=len(packages.splitlines())
+        results= packages.splitlines()
     elif "dpkg" in package_manager:
         dpkg=subprocess.run([package_manager,'list','--installed'],stdout=subprocess.PIPE)
         packages=dpkg.stdout
         result=len(packages.splitlines())
+        results= packages.splitlines()
     else:
         print("supported packages didn't found")
-    print(f' installed packages: {Fore.GREEN}{result}{Style.RESET_ALL}')
+    print(f'installed packages: {Fore.GREEN}{result}{Style.RESET_ALL}')
     if search_packages !=None:
-        if search_packages in result.stdout:
-            print(f'{Fore.GREEN}{search_packages} package present {Style.RESET_ALL}')
-        else:
-            print(f'{Fore.GREEN}{search_packages} package is not present {Style.RESET_ALL}')
-    try:
-        print(f'{Fore.MAGENTA} cleaning up leftovers{Style.RESET_ALL}')
-        subprocess.run(['sudo','dnf','autoremove'])
-    except KeyboardInterrupt:
-        print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')        
+        try:
+            if search_packages in results:
+                print(f'{Fore.GREEN}{search_packages} package present {Style.RESET_ALL}')
+            else:
+                print(f'{Fore.YELLOW}{search_packages} package is not present {Style.RESET_ALL}')
+                print('please provide the complete package name, if you think the package is present')
+        except KeyboardInterrupt:
+            print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')        
 #Section 2 command argument section
 parser= argparse.ArgumentParser(description="basic resource monitor and enumerator")
 subperser= parser.add_subparsers(dest="operation",required=True)
@@ -273,7 +268,6 @@ subperser_software.add_argument('-s','--search',help='search installed packages'
 args=parser.parse_args()
 #here we call the fucntion specified above in order to check target os
 general_verification()
-user_checking
 if args.operation=="system":
     Pprocess=args.process
     users=args.user

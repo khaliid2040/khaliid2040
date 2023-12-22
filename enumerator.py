@@ -4,7 +4,7 @@ import platform
 import psutil, psutil._common
 import time 
 import subprocess
-import re
+import json, pwd
 import netifaces
 import sys
 from colorama import Fore,Style
@@ -121,23 +121,24 @@ def system(process,user):
     print(f"number of cores: {Fore.GREEN} {psutil.cpu_count(logical=False)} {Style.RESET_ALL}")
     mandetory_access_control_identify()
     print("enumerating users...")
-    if args.user==None:
-        print(f"{Fore.YELLOW}no argument:passing... defaulting to all users with login shell{Style.RESET_ALL}")
-        search_string = "bash"
-        file_path = '/etc/passwd'
-        with open(file_path, 'r') as file:
-            for line in file:
-                if search_string in line:
-                    print(line.strip())
+    if user is not None:
+        try:
+            user = pwd.getpwnam(user)
+            keys = ['user', 'password', 'uid', 'gid', 'comment', 'home', 'shell']
+            user_dict = {key: value for key, value in zip(keys, user)}
+            print(json.dumps(user_dict, indent=3))
+        except KeyError:
+            pass
     else:
-        passwd=open('/etc/passwd','r')
-        search_pattern=re.escape(user)
-        for line in passwd:
-            if re.search(search_pattern,line):
-                print(line)
-            else:
-                pass
-        
+        for uid in range(2000):
+            try:
+                user = pwd.getpwuid(uid)
+                keys = ['user', 'password', 'uid', 'gid', 'comment', 'home', 'shell']
+                user_dict = {key: value for key, value in zip(keys, user)}
+                if user_dict['shell'] == '/bin/bash':
+                    print(json.dumps(user_dict, indent=3))
+            except KeyError:
+                continue
     boot_time = psutil.boot_time()
     current_time = datetime.now().timestamp()
     uptime = current_time - boot_time
@@ -229,7 +230,7 @@ def network(interface):
     network_services_checking()
 def software(search_packages):
     print(f'{Fore.MAGENTA}performing software enumeration{Style.RESET_ALL}')
-    command = ['which', 'rpm', 'dpkg']
+    command = ['which', 'rpm', 'apt']
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     package_manager=result.stdout.strip()
     if "rpm" in package_manager:
@@ -237,9 +238,9 @@ def software(search_packages):
         packages=rpm.stdout
         result=len(packages.splitlines())
         results= packages.splitlines()
-    elif "dpkg" in package_manager:
-        dpkg=subprocess.run([package_manager,'list','--installed'],stdout=subprocess.PIPE)
-        packages=dpkg.stdout
+    elif "apt" in package_manager:
+        apt=subprocess.run([package_manager,'list','--installed'],stdout=subprocess.PIPE)
+        packages=apt.stdout
         result=len(packages.splitlines())
         results= packages.splitlines()
     else:

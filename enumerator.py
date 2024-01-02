@@ -59,6 +59,7 @@ def get_network_interfaces(interface):
 def mandetory_access_control_identify():
     try:
         import selinux
+        import apparmor
         selinux_status= selinux.security_getenforce()
         if selinux_status==0:
             print(f'{Fore.RED}selinux is disabled{Style.RESET_ALL}')
@@ -66,21 +67,11 @@ def mandetory_access_control_identify():
             print(f'{Fore.GREEN}selinux is in enforcing mode{Style.RESET_ALL}')
         else:
             print(f'{Fore.YELLOW}selinux is in permisive mode')
-        output = subprocess.check_output(['aa-status'])
-        lines = output.decode().split('\n')
-
-        for line in lines:
-            if 'apparmor module is loaded' in line:
-                print("AppArmor is enabled")
-                break
-            else:
-                print("AppArmor is disabled")
+        
     except ModuleNotFoundError:
         pass
     except FileNotFoundError:
         pass
-#when reading memory psutils prints the size by bytes and there is no way to make it readable so the function 
-# below doing the job by converting the size in from bytes to more human readable size
 
 def network_services_checking():
     # List of network services to filter
@@ -148,17 +139,30 @@ def system(process,user):
     print(f'uptime: {Fore.GREEN}{uptime_readable_hours} hours and {uptime_readable_minutes} minutes{Style.RESET_ALL}')
     print(f'{Fore.YELLOW}current cpu utilization {Style.RESET_ALL}')
     cpu_utilization= psutil.cpu_percent(interval=7)
-    print("cpu utilization percentage: ",cpu_utilization,"%")
+    print(f"{Fore.GREEN}cpu utilization percentage: {cpu_utilization}% {Style.RESET_ALL}")
     if args.process==None:
         pass
     else:
         print("enumerating process resources...")
         try:
-            process_psutils=psutil.Process(process)
-            cpu_percent= psutil.cpu_percent()
-            cpu_time= psutil.cpu_times()
-            print(f"cpu percent of process{Fore.GREEN} {Fore.GREEN} {process_psutils}: {cpu_percent} {Style.RESET_ALL}")
-            print(f"cpu time: {cpu_time}")
+            percent = psutil.Process(process)
+            cpu_times = psutil.cpu_times()
+
+            process_dump = {
+                "PID": percent.pid,
+                "command": percent.name(),
+                "state": percent.status(),
+                "cpu_times": {
+                    "user": cpu_times.user,
+                    "system": cpu_times.system,
+                    "idle": cpu_times.idle,
+        
+                }
+            }
+            # Convert the dictionary to JSON-like output
+            json_output = json.dumps(process_dump, indent=4)
+            # Print the JSON-like output
+            print(json_output)
         except psutil.NoSuchProcess:
             print(f"{Fore.RED} process id {process} not found {Style.RESET_ALL}")
     print(Fore.YELLOW + "enumerating memory utilization..." + Style.RESET_ALL)
@@ -172,7 +176,7 @@ def system(process,user):
     readable_available=psutil._common.bytes2human(available_memory)
     used_memory= psutil.virtual_memory().used
     readable_used=psutil._common.bytes2human(used_memory)
-    print(f"total memory: {readable_total}\nfree: {readable_free}\nbuffer: {readable_buffer}\navailable: {readable_available}\nused memory: {readable_used}")
+    print(f"total memory: {readable_total}\nfree: {readable_free}\nbuffer/cache: {readable_buffer}\navailable: {readable_available}\nused memory: {readable_used}")
     print(f"{Fore.GREEN}memory utilization percent: {psutil.virtual_memory().percent}% {Style.RESET_ALL}")
     print(f'{Fore.YELLOW}disk usage per partition {Style.RESET_ALL}')
     disk_partitions = psutil.disk_partitions()
@@ -186,6 +190,39 @@ def system(process,user):
         disk_usage = psutil.disk_usage(partition_mountpoint)
         readable = psutil._common.bytes2human(disk_usage.total)
         print("{:<15} {:<15} {:<10}".format(partition_device, partition_mountpoint, readable))
+        interval = 1  # Interval in seconds
+    #checking disk io statistics may not be reliable it adds up the total disk i/o operations happened for 5 second
+    print(f'{Fore.YELLOW}checking disk and network i/o statistics {Style.RESET_ALL}')
+    duration=0
+    total_read_ops = 0
+    total_write_ops = 0
+
+    while duration<=5:
+        disk_io = psutil.disk_io_counters()
+        read_ops = disk_io.read_count
+        write_ops = disk_io.write_count
+
+        total_read_ops += read_ops
+        total_write_ops += write_ops
+
+        human_total_read_ops = psutil._common.bytes2human(total_read_ops)
+        human_total_write_ops = psutil._common.bytes2human(total_write_ops)
+        duration+=1
+        time.sleep(interval)
+    print(f"Total Read Operations: {human_total_read_ops}")
+    print(f"Total Write Operations: {human_total_write_ops}")
+    print()
+    # network i/o statistics
+    net_io = psutil.net_io_counters()
+    readable_bytes_sent= psutil._common.bytes2human(net_io.bytes_sent)
+    readable_bytes_recv= psutil._common.bytes2human(net_io.bytes_recv)
+    readable_packet_sent= psutil._common.bytes2human(net_io.packets_sent)
+    readable_packets_recv= psutil._common.bytes2human(net_io.packets_recv)
+
+    print("Bytes Sent:", readable_bytes_sent)
+    print("Bytes Received:", readable_bytes_recv)
+    print("Packets Sent:", readable_packet_sent)
+    print("Packets Received:", readable_packets_recv)
 
 def network(interface):
     print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")

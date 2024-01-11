@@ -4,13 +4,14 @@ import platform
 import psutil, psutil._common
 import time 
 import subprocess
-import json, pwd
+import json, pwd, yaml
 import netifaces
 import sys
 from colorama import Fore,Style
 import socket
-import os
+import getpass
 from datetime import datetime, timedelta
+import paramiko
 #in this code you may see escape character \n i used it in place of instead of using print repeatly in order to improve the code
 #first it must be verifyed if the envirnment the script running on is linux specifically redhat and debian based distro if you are 
 #want to use for software management
@@ -103,7 +104,7 @@ def network_services_checking():
                 print(f'{service_name} is {status}')
 
 #the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
-def system(process,user):
+def system_operation(process,user):
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
     print(f"current kernel running version:{Fore.GREEN} {platform.release()} {Style.RESET_ALL}")
     print(f"current cpu architecture:{Fore.GREEN}{platform.machine()} {Style.RESET_ALL}")
@@ -223,8 +224,8 @@ def system(process,user):
     print("Bytes Received:", readable_bytes_recv)
     print("Packets Sent:", readable_packet_sent)
     print("Packets Received:", readable_packets_recv)
-
-def network(interface):
+# this function will handle all related network operations 
+def network_operation(interface):
     print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")
     time.sleep(2)
     print(f'{Fore.YELLOW}looking for interface {interface} {Style.RESET_ALL}')
@@ -265,7 +266,8 @@ def network(interface):
     # checking running network services the function is declared above
     print(f'{Fore.MAGENTA}checking active network services{Style.RESET_ALL}')
     network_services_checking()
-def software(search_packages):
+# this function will handle all operations related to software like querying packages need some improvement
+def software_operation(search_packages):
     print(f'{Fore.MAGENTA}performing software enumeration{Style.RESET_ALL}')
     command = ['which', 'rpm', 'apt']
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
@@ -291,7 +293,32 @@ def software(search_packages):
                 print(f'{Fore.YELLOW}{search_packages} package is not present {Style.RESET_ALL}')
                 print('please provide the complete package name, if you think the package is present')
         except KeyboardInterrupt:
-            print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')        
+            print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')   
+# the remote function will do all the commands to be run on the remote host it needs first the user to supply those parameters
+            # it may need some improvement to support multiple hosts
+def remote(hostname,username,private_key,password,tasks_file):
+    output=None
+    client= paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        if private_key!=None:
+            client.connect(hostname=hostname,username=username,key_filename=private_key)
+        elif password!=None:
+            client.connect(hostname=hostname,username=username,password=password)
+        with open(tasks_file,'r') as file:
+            results=yaml.safe_load(file)
+            tasks= results['tasks']
+            output= []
+            for task in tasks:
+                stdin, stdout, stderr=client.exec_command(task)
+                output_task= stdout.read().decode()
+                output.append({'command': task, 'output': output_task.strip()})
+    except paramiko.AuthenticationException:
+        print(f"{Fore.RED}authentication failed {Style.RESET_ALL}")
+    except paramiko.ssh_exception.NoValidConnectionsError:
+        print(f"{Fore.RED}couldn't establish connection {Style.RESET_ALL}")
+    
+    return json.dumps(output,indent=3)
 #Section 2 command argument section
 parser= argparse.ArgumentParser(description="basic resource monitor and enumerator")
 subperser= parser.add_subparsers(dest="operation",required=True)
@@ -300,6 +327,12 @@ subperser_system.add_argument("-p","--process",help="monitoring per process",typ
 subperser_system.add_argument("-u","--user",help="output only specific user",type=str)
 subperser_network=subperser.add_parser("network",help="network reporting")
 subperser_network.add_argument('-i','--interface',help="choose interface")
+subperser_remote=subperser.add_parser("remote",help="remote host connection")
+subperser_remote.add_argument('-H','--host',help="specify the remote host only one supported",required=True)
+subperser_remote.add_argument('-f','--file',help="yaml file with tasks",required=True)
+subperser_remote.add_argument('-u','--user',help="specify the user",required=True)
+subperser_remote.add_argument('-p','--password',help="user password",nargs='?')
+subperser_remote.add_argument('-k','--key',help="user ssh key")
 #any neccessary arguments
 subperser_software=subperser.add_parser("software",help="software reporting")
 subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
@@ -309,12 +342,28 @@ general_verification()
 if args.operation=="system":
     Pprocess=args.process
     users=args.user
-    system(Pprocess,users)
+    system_operation(Pprocess,users)
 elif args.operation=="network":
      inet=args.interface
-     network(inet)
+     network_operation(inet)
 elif args.operation=="software":
     search_packages=args.search
-    software(search_packages)
+    software_operation(search_packages)
+#the remote function needs password or ssh key file one of them so the check must based on the user input
+elif args.operation== "remote":
+    host= args.host
+    user= args.user
+    password= args.password
+    private_key=args.key
+    file= args.file
+    if args.password:
+        password= getpass.getpass(f'enter password for {user}')
+        private_key= None
+        remote_host=remote(host,user,private_key,password,file)
+        print(Fore.YELLOW,remote_host,Style.RESET_ALL)
+    elif args.key:
+        password= None
+        remote_host=remote(host,user,private_key,password,file)
+        print(Fore.YELLOW,remote_host,Style.RESET_ALL)
 else:
     print("invalid option")

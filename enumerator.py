@@ -15,103 +15,105 @@ import paramiko
 #in this code you may see escape character \n i used it in place of instead of using print repeatly in order to improve the code
 #first it must be verifyed if the envirnment the script running on is linux specifically redhat and debian based distro if you are 
 #want to use for software management
-def general_verification():
-    if platform.system()=="Linux":
-        print(f'{Fore.GREEN}all good to go{Style.RESET_ALL}')
-    else:
-        print(f'{Fore.RED}Error: target is {platform.system()} is not supported {Style.RESET_ALL}')
-        sys.exit(2)
-# check host network interfaces
-def get_network_interfaces(interface):
-    addresses = netifaces.ifaddresses(interface)
-    gateways= netifaces.gateways()
-    if netifaces.AF_INET in addresses:
-        ipv4_addresses = addresses[netifaces.AF_INET]
-        for address in ipv4_addresses:
-            print("Interface:", interface)
-            print("  - IPv4 Address:", address['addr'])
-            print("  - Broadcast Address:", address.get('broadcast'))
-            print("  - Subnet Mask:", address['netmask'])
-            print("  - Gateway info:", gateways[2][0])
-
-    if netifaces.AF_INET6 in addresses:
-        ipv6_addresses = addresses[netifaces.AF_INET6]
-        for address in ipv6_addresses:
-            #print("Interface:", interface)
-            print("  - IPv6 Address:", address['addr'])
-
-    mtu = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
-    if mtu:
-        mtu_value = mtu[0].get('mtu')
-        if mtu_value is not None:
-            print("Interface:", interface)
-            print("  - MTU:", mtu_value)
-
-    vendor = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
-    if vendor:
-        vendor_name = vendor[0].get('vendor')
-        if vendor_name is not None:
-            print("Interface:", interface)
-            print("  - Vendor:", vendor_name)
-    else:
-        mac_address = vendor[0].get('addr')
-        print("Interface:", interface)
-        print("  - MAC Address:", mac_address)
-def mandetory_access_control_identify():
-    try:
-        import selinux
-        import apparmor
-        selinux_status= selinux.security_getenforce()
-        if selinux_status==0:
-            print(f'{Fore.RED}selinux is disabled{Style.RESET_ALL}')
-        elif selinux_status==1:
-            print(f'{Fore.GREEN}selinux is in enforcing mode{Style.RESET_ALL}')
+class ExtendedFunctions:
+    def __init__(self):
+        if platform.system()=="Linux":
+            print(f'{Fore.GREEN}all good to go{Style.RESET_ALL}')
         else:
-            print(f'{Fore.YELLOW}selinux is in permisive mode')
-        
-    except ModuleNotFoundError:
-        pass
-    except FileNotFoundError:
-        pass
+            print(f'{Fore.RED}Error: target is {platform.system()} is not supported {Style.RESET_ALL}')
+            sys.exit(2)
+    # check host network interfaces
+    def get_network_interfaces(self,interface):
+        addresses = netifaces.ifaddresses(interface)
+        gateways= netifaces.gateways()
+        if netifaces.AF_INET in addresses:
+            ipv4_addresses = addresses[netifaces.AF_INET]
+            for address in ipv4_addresses:
+                print("Interface:", interface)
+                print("  - IPv4 Address:", address['addr'])
+                print("  - Broadcast Address:", address.get('broadcast'))
+                print("  - Subnet Mask:", address['netmask'])
+                print("  - Gateway info:", gateways[2][0])
 
-def network_services_checking():
-    # List of network services to filter
-    network_services = [
-    "sshd", "httpd","nginx", 
-    "mysqld", "named", "dhcpd", "vsftpd", "smbd", 
-    "postfix", "dovecot",   "telnet", "nfs",
-    "snmpd","cups","squid",
-    "ircd","openvpn", "pptpd",
-    "nfs-kernel-server",
-    "samba",
-]
+        if netifaces.AF_INET6 in addresses:
+            ipv6_addresses = addresses[netifaces.AF_INET6]
+            for address in ipv6_addresses:
+                #print("Interface:", interface)
+                print("  - IPv6 Address:", address['addr'])
 
-    # Run the systemctl command to list specific active network services
-    command = ['systemctl', 'list-units', '--type=service', '--no-pager', '--no-legend']
-    output = subprocess.check_output(command, universal_newlines=True)
+        mtu = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
+        if mtu:
+            mtu_value = mtu[0].get('mtu')
+            if mtu_value is not None:
+                print("Interface:", interface)
+                print("  - MTU:", mtu_value)
 
-# Process the output and extract service and status
-    lines = output.strip().split('\n')
-    for line in lines:
-        parts = line.split()
-        if parts and len(parts) >= 3:
-            service = parts[0]
-            status = parts[2]
-        # Remove the ".service" extension from the service name
-            service_name = service.split('.', 1)[0]
-        # Check if the service is in the network services list
-            if service_name in network_services:
-                print(f'{service_name} is {status}')
+        vendor = netifaces.ifaddresses(interface).get(netifaces.AF_LINK, [])
+        if vendor:
+            vendor_name = vendor[0].get('vendor')
+            if vendor_name is not None:
+                print("Interface:", interface)
+                print("  - Vendor:", vendor_name)
+        else:
+            mac_address = vendor[0].get('addr')
+            print("Interface:", interface)
+            print("  - MAC Address:", mac_address)
+    def mandetory_access_control_identify(self):
+        try:
+            import selinux
+            import apparmor
+            selinux_status= selinux.security_getenforce()
+            if selinux_status==0:
+                print(f'{Fore.RED}selinux is disabled{Style.RESET_ALL}')
+            elif selinux_status==1:
+                print(f'{Fore.GREEN}selinux is in enforcing mode{Style.RESET_ALL}')
+            else:
+                print(f'{Fore.YELLOW}selinux is in permisive mode')
+            
+        except ModuleNotFoundError:
+            pass
+        except FileNotFoundError:
+            pass
+
+    def network_services_checking(self):
+        # List of network services to filter
+        network_services = [
+        "sshd", "httpd","nginx", 
+        "mysqld", "named", "dhcpd", "vsftpd", "smbd", 
+        "postfix", "dovecot",   "telnet", "nfs",
+        "snmpd","cups","squid",
+        "ircd","openvpn", "pptpd",
+        "nfs-kernel-server",
+        "samba",
+    ]
+
+        # Run the systemctl command to list specific active network services
+        command = ['systemctl', 'list-units', '--type=service', '--no-pager', '--no-legend']
+        output = subprocess.check_output(command, universal_newlines=True)
+
+    # Process the output and extract service and status
+        lines = output.strip().split('\n')
+        for line in lines:
+            parts = line.split()
+            if parts and len(parts) >= 3:
+                service = parts[0]
+                status = parts[2]
+            # Remove the ".service" extension from the service name
+                service_name = service.split('.', 1)[0]
+            # Check if the service is in the network services list
+                if service_name in network_services:
+                    print(f'{service_name} is {status}')
 
 #the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
 def system_operation(process,user):
+    mandatory= ExtendedFunctions()
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
     print(f"current kernel running version:{Fore.GREEN} {platform.release()} {Style.RESET_ALL}")
     print(f"current cpu architecture:{Fore.GREEN}{platform.machine()} {Style.RESET_ALL}")
     print(f"hostname:{Fore.GREEN}{platform.node()} {Style.RESET_ALL}")
     print(f"number of processors:{Fore.GREEN} {psutil.cpu_count()} {Style.RESET_ALL}")
     print(f"number of cores: {Fore.GREEN} {psutil.cpu_count(logical=False)} {Style.RESET_ALL}")
-    mandetory_access_control_identify()
+    mandatory.mandetory_access_control_identify()
     print("enumerating users...")
     if user is not None:
         try:
@@ -226,20 +228,22 @@ def system_operation(process,user):
     print("Packets Received:", readable_packets_recv)
 # this function will handle all related network operations 
 def network_operation(interface):
+    extendedfunctions= ExtendedFunctions()
     print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")
     time.sleep(2)
     print(f'{Fore.YELLOW}looking for interface {interface} {Style.RESET_ALL}')
     interfaces= netifaces.interfaces()
     if interface in interfaces:
         try:
-            get_network_interfaces(interface)
+            extendedfunctions= ExtendedFunctions()
+            extendedfunctions.get_network_interfaces(interface)
         except ValueError:
             print(f'{Fore.RED}invalid interface,{Style.RESET_ALL}')
     elif interface is not interfaces:
         print(f'{Fore.RED}invalid interface,{Style.RESET_ALL} listing other interfaces')
         interfaces= netifaces.interfaces()
         for interface in interfaces:
-            get_network_interfaces(interface)
+            extendedfunctions.get_network_interfaces(interface)
     print(Fore.YELLOW + 'dumping routing table...' + Style.RESET_ALL)
     subprocess.run(['ip','route','show'])
     print(Fore.YELLOW + 'dumping arp table...' + Style.RESET_ALL)
@@ -265,9 +269,11 @@ def network_operation(interface):
         check_port(host,port)
     # checking running network services the function is declared above
     print(f'{Fore.MAGENTA}checking active network services{Style.RESET_ALL}')
-    network_services_checking()
+
+    extendedfunctions.network_services_checking()
 # this function will handle all operations related to software like querying packages need some improvement
 def software_operation(search_packages):
+    
     print(f'{Fore.MAGENTA}performing software enumeration{Style.RESET_ALL}')
     command = ['which', 'rpm', 'apt']
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
@@ -338,14 +344,14 @@ subperser_software=subperser.add_parser("software",help="software reporting")
 subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
 args=parser.parse_args()
 #here we call the fucntion specified above in order to check target os
-general_verification()
+
 if args.operation=="system":
     Pprocess=args.process
     users=args.user
     system_operation(Pprocess,users)
 elif args.operation=="network":
-     inet=args.interface
-     network_operation(inet)
+     interface=args.interface
+     network_operation(interface)
 elif args.operation=="software":
     search_packages=args.search
     software_operation(search_packages)

@@ -12,7 +12,7 @@ class EnumerateHost:
         self.password = password
         self.key = key
         self.clients = []
-
+        
         for host in self.hosts:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

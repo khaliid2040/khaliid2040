@@ -17,6 +17,7 @@ import paramiko
 #want to use for software management
 class ExtendedFunctions:
     def __init__(self):
+        #check if the platform is linux because script only supports linux
         if platform.system()=="Linux":
             print(f'{Fore.GREEN}all good to go{Style.RESET_ALL}')
         else:
@@ -59,6 +60,8 @@ class ExtendedFunctions:
             print("Interface:", interface)
             print("  - MAC Address:", mac_address)
     def mandetory_access_control_identify(self):
+        #this function is for checking mandatory access control status both apparmore and 
+        #selinux this function may have bugs depend on your operating system
         try:
             import selinux
             import apparmor
@@ -103,9 +106,65 @@ class ExtendedFunctions:
             # Check if the service is in the network services list
                 if service_name in network_services:
                     print(f'{service_name} is {status}')
+#this section is for remote connections this class will do the functionality of the remote hosts
+class EnumerateHost:
+    def __init__(self, hosts, user, password, key):
+        self.hosts = hosts
+        self.user = user
+        self.password = password
+        self.key = key
+        self.clients = []
+        
+        for host in self.hosts:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.clients.append(client)
 
-#the above must be declared all ficility non-component functions and all below functions in this comment must be script component functions
+            try:
+                if password is not None:
+                    client.connect(hostname=host, username=self.user, password=self.password)
+                elif key is not None:
+                    client.connect(hostname=host, username=self.user, key_filename=self.key)
+            except paramiko.AuthenticationException:
+                print(f'Authentication error for host: {host}')
+                sys.exit(2)
+            except paramiko.ssh_exception.NoValidConnectionsError:
+                print(f'Failed to connect to host: {host}')
+                sys.exit(2)
+            except TimeoutError:
+                print(f'Connection timed out for host: {host}')
+                sys.exit(2)
+
+    def execute_commands(self, yaml_filename):
+        yaml_file = open(yaml_filename, 'r')
+        loaded_yaml_file = yaml.safe_load(yaml_file.read())
+        tasks_json_loads = {}
+
+        for host in self.hosts:
+            tasks_json_loads[host] = {}
+
+            for task in loaded_yaml_file['tasks']:
+                stdin, stdout, stderr = self.clients[self.hosts.index(host)].exec_command(task)
+                output = stdout.read().decode('utf-8')
+                error = stderr.read().decode('utf-8')
+
+                if error:
+                    print(f"Error occurred on host {host}: {error}")
+
+                tasks_json_loads[host][task] = output
+
+        print(json.dumps(tasks_json_loads, indent=3))
+
+        for client in self.clients:
+            client.close()
+
+#those below functions are the ones that process arguments and above one with the class are simplifiers
+# if you need to add functionality declare your fucntions above that is how i structured the script to minimize confusion
+#---------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------------      
 def system_operation(process,user):
+    #this function is system related checkings like os kernel version cpu architecture and resource utilizations
+
     mandatory= ExtendedFunctions()
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
     print(f"current kernel running version:{Fore.GREEN} {platform.release()} {Style.RESET_ALL}")
@@ -226,7 +285,7 @@ def system_operation(process,user):
     print("Bytes Received:", readable_bytes_recv)
     print("Packets Sent:", readable_packet_sent)
     print("Packets Received:", readable_packets_recv)
-# this function will handle all related network operations 
+# this function will handle all related network operations like retrieving interfaces ip addresses
 def network_operation(interface):
     extendedfunctions= ExtendedFunctions()
     print(f"{Fore.MAGENTA}performing network enumeration{Style.RESET_ALL}")
@@ -300,76 +359,59 @@ def software_operation(search_packages):
                 print('please provide the complete package name, if you think the package is present')
         except KeyboardInterrupt:
             print(f'{Fore.RED} keyboard interrupt exiting....{Style.RESET_ALL}')   
-# the remote function will do all the commands to be run on the remote host it needs first the user to supply those parameters
-            # it may need some improvement to support multiple hosts
-def remote(hostname,username,private_key,password,tasks_file):
-    output=None
-    client= paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        if private_key!=None:
-            client.connect(hostname=hostname,username=username,key_filename=private_key)
-        elif password!=None:
-            client.connect(hostname=hostname,username=username,password=password)
-        with open(tasks_file,'r') as file:
-            results=yaml.safe_load(file)
-            tasks= results['tasks']
-            output= []
-            for task in tasks:
-                stdin, stdout, stderr=client.exec_command(task)
-                output_task= stdout.read().decode()
-                output.append({'command': task, 'output': output_task.strip()})
-    except paramiko.AuthenticationException:
-        print(f"{Fore.RED}authentication failed {Style.RESET_ALL}")
-    except paramiko.ssh_exception.NoValidConnectionsError:
-        print(f"{Fore.RED}couldn't establish connection {Style.RESET_ALL}")
-    
-    return json.dumps(output,indent=3)
-#Section 2 command argument section
-parser= argparse.ArgumentParser(description="basic resource monitor and enumerator")
-subperser= parser.add_subparsers(dest="operation",required=True)
-subperser_system=subperser.add_parser("system",help="system reporting")
-subperser_system.add_argument("-p","--process",help="monitoring per process",type=int)
-subperser_system.add_argument("-u","--user",help="output only specific user",type=str)
-subperser_network=subperser.add_parser("network",help="network reporting")
-subperser_network.add_argument('-i','--interface',help="choose interface")
-subperser_remote=subperser.add_parser("remote",help="remote host connection")
-subperser_remote.add_argument('-H','--host',help="specify the remote host only one supported",required=True)
-subperser_remote.add_argument('-f','--file',help="yaml file with tasks",required=True)
-subperser_remote.add_argument('-u','--user',help="specify the user",required=True)
-subperser_remote.add_argument('-p','--password',help="user password",nargs='?')
-subperser_remote.add_argument('-k','--key',help="user ssh key")
-#any neccessary arguments
-subperser_software=subperser.add_parser("software",help="software reporting")
-subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
-args=parser.parse_args()
-#here we call the fucntion specified above in order to check target os
 
-if args.operation=="system":
-    Pprocess=args.process
-    users=args.user
-    system_operation(Pprocess,users)
-elif args.operation=="network":
-     interface=args.interface
-     network_operation(interface)
-elif args.operation=="software":
-    search_packages=args.search
-    software_operation(search_packages)
-#the remote function needs password or ssh key file one of them so the check must based on the user input
-elif args.operation== "remote":
-    host= args.host
-    user= args.user
-    password= args.password
-    private_key=args.key
-    file= args.file
-    if args.password:
-        password= getpass.getpass(f'enter password for {user}')
-        private_key= None
-        remote_host=remote(host,user,private_key,password,file)
-        print(Fore.YELLOW,remote_host,Style.RESET_ALL)
-    elif args.key:
-        password= None
-        remote_host=remote(host,user,private_key,password,file)
-        print(Fore.YELLOW,remote_host,Style.RESET_ALL)
-else:
-    print("invalid option")
+#Section 2 command argument section
+if __name__=="__main__":
+    parser= argparse.ArgumentParser(description="basic resource monitor and enumerator")
+    subperser= parser.add_subparsers(dest="operation",required=True)
+    subperser_system=subperser.add_parser("system",help="system reporting")
+    subperser_system.add_argument("-p","--process",help="monitoring per process",type=int)
+    subperser_system.add_argument("-u","--user",help="output only specific user",type=str)
+    subperser_network=subperser.add_parser("network",help="network reporting")
+    subperser_network.add_argument('-i','--interface',help="choose interface")
+    subperser_remote=subperser.add_parser("remote",help="remote host connection")
+    subperser_remote.add_argument('-H','--host',help="specify the remote host only one supported",required=True)
+    subperser_remote.add_argument('-f','--file',help="yaml file with tasks",required=True)
+    subperser_remote.add_argument('-u','--user',help="specify the user",required=True)
+    subperser_remote.add_argument('-p','--password',help="user password",nargs='?')
+    subperser_remote.add_argument('-k','--key',help="user ssh key")
+    #any neccessary arguments
+    subperser_software=subperser.add_parser("software",help="software reporting")
+    subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
+    args=parser.parse_args()
+    #here we call the fucntion specified above in order to check target os
+
+    if args.operation=="system":
+        Pprocess=args.process
+        users=args.user
+        system_operation(Pprocess,users)
+    elif args.operation=="network":
+        interface=args.interface
+        network_operation(interface)
+    elif args.operation=="software":
+        search_packages=args.search
+        software_operation(search_packages)
+    #the remote function needs password or ssh key file one of them so the check must based on the user input
+    elif args.operation== "remote":
+        host= args.host
+        user= args.user
+        password= args.password
+        private_key=args.key
+        yaml_file= args.file
+        if args.password:
+            password = getpass.getpass('Enter your password: ')
+            key = None
+        elif args.key:
+            key = args.key
+            password = None
+        else:
+            print("Please specify either a password or key for authentication.")
+            sys.exit(2)
+        hosts_file = open(args.file, 'r')
+        loaded_hosts_file = yaml.safe_load(hosts_file.read())
+        hosts = loaded_hosts_file['hosts']
+
+        enumeratehost = EnumerateHost(hosts=hosts, user=user, password=password, key=key)
+        enumeratehost.execute_commands(yaml_file)
+    else:
+        print("invalid option")

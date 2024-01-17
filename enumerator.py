@@ -64,7 +64,6 @@ class ExtendedFunctions:
         #selinux this function may have bugs depend on your operating system
         try:
             import selinux
-            import apparmor
             selinux_status= selinux.security_getenforce()
             if selinux_status==0:
                 print(f'{Fore.RED}selinux is disabled{Style.RESET_ALL}')
@@ -74,9 +73,15 @@ class ExtendedFunctions:
                 print(f'{Fore.YELLOW}selinux is in permisive mode')
             
         except ModuleNotFoundError:
-            pass
+            # and now checking apparmore if selinux import fails that means that selinux is not 
+            #available and checking apparmor
+            result = subprocess.run(['aa-status'], capture_output=True, text=True)
+            first_line = result.stdout.strip().split('\n')[0]
+            print(Fore.GREEN,first_line,Style.RESET_ALL)
         except FileNotFoundError:
             pass
+        except Exception as e:
+            print('selinux nor apparmore are available')
 
     def network_services_checking(self):
         # List of network services to filter
@@ -375,11 +380,10 @@ if __name__=="__main__":
     subperser_remote.add_argument('-u','--user',help="specify the user",required=True)
     subperser_remote.add_argument('-p','--password',help="user password",nargs='?')
     subperser_remote.add_argument('-k','--key',help="user ssh key")
-    #any neccessary arguments
+
     subperser_software=subperser.add_parser("software",help="software reporting")
     subperser_software.add_argument('-s','--search',help='search installed packages',type=str)
     args=parser.parse_args()
-    #here we call the fucntion specified above in order to check target os
 
     if args.operation=="system":
         Pprocess=args.process

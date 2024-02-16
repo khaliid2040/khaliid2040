@@ -6,7 +6,7 @@ import time
 import subprocess
 import json, pwd, yaml
 import netifaces
-import sys
+import sys,os
 from colorama import Fore,Style
 import socket
 import getpass
@@ -111,6 +111,29 @@ class ExtendedFunctions:
             # Check if the service is in the network services list
                 if service_name in network_services:
                     print(f'{service_name} is {status}')
+    def get_firmware_info(self):
+        firmware_version = None
+        uefi = False
+
+        try:
+            # Read the firmware version from the sysfs filesystem
+            with open('/sys/class/dmi/id/bios_version', 'r') as f:
+                firmware_version = f.read().strip()
+
+        # Check if UEFI by examining the firmware_vendor file
+            with open('/sys/class/dmi/id/bios_vendor', 'r') as f:
+                bios_vendor = f.read().strip()
+                if 'UEFI' in bios_vendor:
+                    uefi = True
+        except FileNotFoundError:
+            pass
+        if os.path.exists('/sys/firmware/efi'):
+            print('firmware type: UEFI')
+        else:
+            print("firmware type: BIOS")
+        return firmware_version, uefi
+    
+
 #this section is for remote connections this class will do the functionality of the remote hosts
 class EnumerateHost:
     def __init__(self, hosts, user, password, key):
@@ -170,14 +193,16 @@ class EnumerateHost:
 def system_operation(process,user):
     #this function is system related checkings like os kernel version cpu architecture and resource utilizations
 
-    mandatory= ExtendedFunctions()
+    extendedfunctions= ExtendedFunctions()
     print(Fore.YELLOW + "perfoming system enumeration" + Style.RESET_ALL)
     print(f"current kernel running version:{Fore.GREEN} {platform.release()} {Style.RESET_ALL}")
     print(f"current cpu architecture:{Fore.GREEN}{platform.machine()} {Style.RESET_ALL}")
     print(f"hostname:{Fore.GREEN}{platform.node()} {Style.RESET_ALL}")
     print(f"number of processors:{Fore.GREEN} {psutil.cpu_count()} {Style.RESET_ALL}")
     print(f"number of cores: {Fore.GREEN} {psutil.cpu_count(logical=False)} {Style.RESET_ALL}")
-    mandatory.mandetory_access_control_identify()
+    extendedfunctions.mandetory_access_control_identify()
+    print(f'{Fore.YELLOW}checking firmware{Style.RESET_ALL}')
+    extendedfunctions.get_firmware_info()
     print("enumerating users...")
     if user is not None:
         try:

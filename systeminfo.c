@@ -5,50 +5,37 @@
 #include <stdlib.h>
 #include <string.h>
 /* some neccessary functions need the program to work*/
-int getProcessInfo(pid_t pid, char *buffer, size_t bufferSize) {
-    char path[32];
-    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
-    
-    FILE *file = fopen(path, "r");
-    if (file == NULL) {
-        return -1;
-    }
-    
-    int scanned = fscanf(file, "%*d (%[^)])", buffer);
-    fclose(file);
-    
-    if (scanned == 1) {
-        return 0;
-    } else {
-        return -1;
-    }
+int getProcessInfo(pid_t pid, unsigned long uptime) {
     char statPath[256];
-    char statmPath[256];
-    snprintf(statPath, sizeof(statPath), "/proc/%s/stat", pid);
-    snprintf(statmPath, sizeof(statmPath), "/proc/%s/statm", pid);
+    snprintf(statPath, sizeof(statPath), "/proc/%d/stat", pid);
 
     FILE* statFile = fopen(statPath, "r");
-    FILE* statmFile = fopen(statmPath, "r");
-
-    if (statFile && statmFile) {
-        int processId;
-        char processName[256];
-        unsigned long utime, stime;
-        unsigned long rss;
-
-        fscanf(statFile, "%d (%[^)]) %*c %*d %*d %*d %*d %*d %*u "
-                         "%*lu %*lu %*lu %*lu %*lu %lu %lu", &processId, processName, &utime, &stime);
-        fscanf(statmFile, "%*lu %lu", &rss);
-
-        printf("Process ID: %d\n", pid);
-        printf("Process Name: %s\n", processName);
-        printf("CPU Time (user): %lu\n", utime);
-        printf("CPU Time (system): %lu\n", stime);
-        printf("Resident Set Size (RSS): %lu\n\n", rss);
-
-        fclose(statFile);
-        fclose(statmFile);
+    if (statFile == NULL) {
+        perror("Failed to open stat file");
+        return -1;
     }
+
+    int processId;
+    char processName[256];
+    unsigned long utime, stime;
+    unsigned long hertz = sysconf(_SC_CLK_TCK);
+    double process_total_time;
+    double cpu_percentage;
+
+    fscanf(statFile, "%d (%[^)]) %*c %*d %*d %*d %*d %*d %*u "
+                     "%*lu %*lu %*lu %*lu %*lu %lu %lu", &processId, processName, &utime, &stime);
+
+    process_total_time = (double)(utime + stime) / hertz;
+    double process_total_time_percent= (process_total_time / uptime) * 100;
+
+    printf("Process ID: %d\n", pid);
+    printf("Process Name: %s\n", processName);
+    printf("CPU Time: %.2f seconds\n", process_total_time);
+    printf("user time percent %.2f %\n", process_total_time_percent);
+
+    fclose(statFile);
+
+    return 0;
 }
 /*system information function*/
 void systeminfo( int getpid)
@@ -58,7 +45,7 @@ void systeminfo( int getpid)
     if (sysinfo(&system_info) == 0)
     {
         printf("uptime: %ld", system_info.uptime);
-        printf("\nTotal memory: %d GB\n", system_info.totalram / 1024 / 1024);
+        printf("\nTotal memory: %d GB\n", system_info.totalram / 1024 / 1024 / 1024);
         
     }
     /* since the program is doing system related things for security reasons it must not be run as root
@@ -90,9 +77,9 @@ void systeminfo( int getpid)
         }
     }
     printf("getting process information\n");
-    char buffer[255];
-    getProcessInfo(getpid,buffer, sizeof(buffer));
-    printf("%s\n",buffer);
+    long total_time= system_info.uptime;
+    getProcessInfo(getpid, total_time);
+    
     /*
         cpuinfo_buffer holds the buffer of the cpuinfo file
         buffer_size is the size of the buffer
@@ -106,20 +93,24 @@ void systeminfo( int getpid)
     int processors_count= 0;
     int cores_count= 0;
     FILE *cpuinfo = fopen("/proc/cpuinfo","r");
+
+    if (cpuinfo == NULL) {
+        printf("Failed to open cpuinfo file.\n");
+
+    }
     while (getline(&cpuinfo_buffer, &buffer_size, cpuinfo) != -1)
     {
         if (strstr(cpuinfo_buffer, processors) != NULL) {
             processors_count++;
-            
         }
         if (strstr(cpuinfo_buffer, cores) != NULL) {
             cores_count++;
-            printf("%s", cpuinfo_buffer);
-            break;
         }
     }
+    printf("Number of cores: %d\n", cores_count /2);
     printf("number of processors: %d\n",processors_count);
-    
+    // checking firmware
+
     free(cpuinfo_buffer);
     fclose(cpuinfo);
 }

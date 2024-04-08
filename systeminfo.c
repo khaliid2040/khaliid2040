@@ -4,7 +4,10 @@
 #include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/utsname.h>
 /* some neccessary functions need the program to work*/
+typedef unsigned long cpuInfo;
+typedef const char* cpuProperty;
 int getProcessInfo(pid_t pid, unsigned long uptime) {
     char statPath[256];
     snprintf(statPath, sizeof(statPath), "/proc/%d/stat", pid);
@@ -17,8 +20,8 @@ int getProcessInfo(pid_t pid, unsigned long uptime) {
 
     int processId;
     char processName[256];
-    unsigned long utime, stime;
-    unsigned long hertz = sysconf(_SC_CLK_TCK);
+    cpuInfo utime, stime;
+    cpuInfo hertz = sysconf(_SC_CLK_TCK);
     double process_total_time;
     double cpu_percentage;
 
@@ -27,12 +30,14 @@ int getProcessInfo(pid_t pid, unsigned long uptime) {
 
     process_total_time = (double)(utime + stime) / hertz;
     double process_total_time_percent= (process_total_time / uptime) * 100;
-
+    double userspace_time= (process_total_time / utime);
+    double system_time= (process_total_time / stime);
     printf("Process ID: %d\n", pid);
     printf("Process Name: %s\n", processName);
     printf("CPU Time: %.2f seconds\n", process_total_time);
-    printf("user time percent %.2f %\n", process_total_time_percent);
-
+    printf("process time percent %.2f %\n", process_total_time_percent);
+    printf("user time percent %.2f %\n", userspace_time);
+    printf("system time percent %.2f %\n", system_time);
     fclose(statFile);
 
     return 0;
@@ -44,7 +49,8 @@ void systeminfo( int getpid)
     struct sysinfo system_info;
     if (sysinfo(&system_info) == 0)
     {
-        printf("uptime: %ld", system_info.uptime);
+        unsigned short uptime_min= system_info.uptime / 60;
+        printf("uptime %d minutes", uptime_min);
         printf("\nTotal memory: %d GB\n", system_info.totalram / 1024 / 1024 / 1024);
         
     }
@@ -52,7 +58,14 @@ void systeminfo( int getpid)
     if next time needed we will remove this code but now it must be their for security reasons */
     __uid_t uid= getuid();
     __gid_t gid= getgid();
-    
+    //now getting kernel information
+    printf("checking running kernel\n");
+    struct utsname kernel_info;
+    if (uname(&kernel_info) == -1)
+    {
+        perror("error");
+    }
+    printf("kernel version: %s\n",kernel_info.release);
     printf("Warning: this script wan't supposed to be run under the root user \n");
     if (uid < 1000 && gid < 1000)
     {
@@ -88,8 +101,8 @@ void systeminfo( int getpid)
     */
     char *cpuinfo_buffer= NULL;
     size_t buffer_size= 0;
-    const char* processors = "processor";
-    const char* cores = "cores";
+    cpuProperty processors = "processor";
+    cpuProperty cores = "cores";
     int processors_count= 0;
     int cores_count= 0;
     FILE *cpuinfo = fopen("/proc/cpuinfo","r");
@@ -114,13 +127,23 @@ void systeminfo( int getpid)
     free(cpuinfo_buffer);
     fclose(cpuinfo);
 }
-int main()
+int main(int argc, char *argv[])
 {
     printf("system enumeration\n");
     
-    __pid_t pid;
-    printf("enter process ID: ");
-    scanf("%d",&pid);
-    systeminfo(pid);
+    
+    if (argc < 2)
+    {
+        printf("too few arguments\n");
+        return 1;
+    } else if (strcmp(argv[1], "-p")== 0)
+    {
+        int pid = atoi(argv[2]);
+        systeminfo(pid);
+    } else {
+        printf("invalid option\n");
+        return 2;
+    }
+    
     return 0;
 }

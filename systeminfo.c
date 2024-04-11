@@ -5,9 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <sys/statvfs.h>
+
 /* some neccessary functions need the program to work*/
 typedef unsigned long cpuInfo;
 typedef const char* cpuProperty;
+typedef unsigned long long d_size;
 int getProcessInfo(pid_t pid, unsigned long uptime) {
     char statPath[256];
     snprintf(statPath, sizeof(statPath), "/proc/%d/stat", pid);
@@ -126,6 +129,31 @@ void systeminfo( int getpid)
 
     free(cpuinfo_buffer);
     fclose(cpuinfo);
+    struct statvfs vfs;
+    char* mountpoints[]= {"/", "/boot", "/boot/efi","/home"};
+    int mp_count= 5;
+    d_size total_blocks,block_size,available_blocks,total_size,available_size;
+    double total_gb,available_gb;
+    for (int i=0; i <mp_count; i++)
+    {
+        if (statvfs(mountpoints[i], &vfs)== -1)
+        {
+            perror("statvfs: error");
+            return -1;
+        }   
+    
+        /*in case of size_d it declared in the about typedefs size mean total size and d is short for disk
+            so it abbriviated on size_disk*/
+        total_blocks= vfs.f_blocks;
+        block_size= vfs.f_frsize;
+        available_blocks= vfs.f_bavail;
+        total_size= block_size * total_blocks;
+        available_size= block_size * available_blocks;
+        total_gb= (double) total_size / (1024 * 1024 * 1024);
+        available_gb= (double) available_size / (1024 * 1024 * 1024);
+        printf("total size of mountpoint %s: %.2f GB\n", total_gb,mountpoints[i]);
+        printf("available size of mounpoint %s: %.2f GB\n\n", available_gb, mountpoints[i]);
+    }
 }
 int main(int argc, char *argv[])
 {

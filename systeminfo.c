@@ -5,12 +5,35 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
-#include <sys/statvfs.h>
-
+#include <sys/types.h>
+//#include <sys/statvfs.h> not sure if needed
+#define SIZE 1024
 /* some neccessary functions need the program to work*/
 typedef unsigned long cpuInfo;
 typedef const char* cpuProperty;
-typedef unsigned long long d_size;
+//typedef unsigned long long d_size; not sure if needed review needed 
+int Detectos() {
+    char buffer[120];
+    FILE *uname= popen("uname -s","r");
+    if(uname == NULL)
+    {
+        perror("error running command");
+    }
+    if (fgets(buffer,sizeof(buffer),uname) !=NULL)
+    {
+        buffer[strcspn(buffer, "\n")] = '\0';
+        if (strcmp(buffer,"Linux")==0)
+        {
+            printf("detected operating system: Linux\n");
+        }
+        else {
+            printf("not linux");
+            return -1;
+        }
+    }
+    pclose(uname);
+    return 0;
+}
 int getProcessInfo(pid_t pid, unsigned long uptime) {
     char statPath[256];
     snprintf(statPath, sizeof(statPath), "/proc/%d/stat", pid);
@@ -48,6 +71,7 @@ int getProcessInfo(pid_t pid, unsigned long uptime) {
 /*system information function*/
 void systeminfo( int getpid)
 {
+    Detectos();
     /*using the information provided by sysinfo library data structure*/
     struct sysinfo system_info;
     if (sysinfo(&system_info) == 0)
@@ -129,30 +153,21 @@ void systeminfo( int getpid)
 
     free(cpuinfo_buffer);
     fclose(cpuinfo);
-    struct statvfs vfs;
-    char* mountpoints[]= {"/", "/boot", "/boot/efi","/home"};
-    int mp_count= 5;
-    d_size total_blocks,block_size,available_blocks,total_size,available_size;
-    double total_gb,available_gb;
-    for (int i=0; i <mp_count; i++)
+    //checking for Linux Security Modules
+    printf("checking for Linux Security Modules\n");
+    char buffer[SIZE];
+    char *apparmor= "loaded";
+    FILE *file = popen("aa-status 2>/dev/null","r");
+    if (file !=NULL)
     {
-        if (statvfs(mountpoints[i], &vfs)== -1)
+        if (fgets(buffer,SIZE,file) !=NULL)
         {
-            perror("statvfs: error");
-            return -1;
-        }   
-    
-        /*in case of size_d it declared in the about typedefs size mean total size and d is short for disk
-            so it abbriviated on size_disk*/
-        total_blocks= vfs.f_blocks;
-        block_size= vfs.f_frsize;
-        available_blocks= vfs.f_bavail;
-        total_size= block_size * total_blocks;
-        available_size= block_size * available_blocks;
-        total_gb= (double) total_size / (1024 * 1024 * 1024);
-        available_gb= (double) available_size / (1024 * 1024 * 1024);
-        printf("total size of mountpoint %s: %.2f GB\n", total_gb,mountpoints[i]);
-        printf("available size of mounpoint %s: %.2f GB\n\n", available_gb, mountpoints[i]);
+            if (strstr(buffer,apparmor)!=NULL)
+            {
+                printf("apparmor is detected\n");
+            }
+        }
+        pclose(file);
     }
 }
 int main(int argc, char *argv[])
